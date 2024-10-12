@@ -1,4 +1,4 @@
-#include <stdio.h>
+L#include <stdio.h>
 #include "map_advs.h"
 #include "metamod_oslink.h"
 #include "entitykeyvalues.h"
@@ -41,20 +41,39 @@ CGameEntitySystem* GameEntitySystem()
 	return g_pUtils->GetCGameEntitySystem();
 }
 
+bool containsOnlyDigits(const std::string& str) {
+	return str.find_first_not_of("0123456789") == std::string::npos;
+}
+
 CON_COMMAND_F(mm_map_advs_give, "", FCVAR_NONE)
 {	
-	if(args.ArgC() < 2)
+	if (args.ArgC() > 1 && args[1][0])
 	{
-		Warning("Usage: mm_map_advs_give <userid>\n");
-		return;
+		bool bFound = false;
+		CCSPlayerController* pController;
+		int iSlot = 0;
+		for (int i = 0; i < 64; i++)
+		{
+			pController = CCSPlayerController::FromSlot(i);
+			if (!pController)
+				continue;
+			uint32 m_steamID = pController->m_steamID();
+			if(m_steamID == 0)
+				continue;
+			if(strstr(pController->m_iszPlayerName(), args[1]) || (containsOnlyDigits(args[1]) && m_steamID == std::stoll(args[1])) || (containsOnlyDigits(args[1]) && std::stoll(args[1]) == i) || (containsOnlyDigits(args[1]) && std::stoll(args[1]) == engine->GetClientXUID(i)))
+			{
+				bFound = true;
+				iSlot = i;
+				break;
+			}
+		}
+		if(bFound)
+		{
+			g_bAccess[iSlot] = true;
+		}
+		else META_CONPRINT("[MAP_ADVS] Player not found\n");
 	}
-	int iSlot = atoi(args.Arg(1));
-	if(iSlot == -1)
-	{
-		Warning("Player not found\n");
-		return;
-	}
-	g_bAccess[iSlot] = true;
+	else META_CONPRINT("[MAP_ADVS] Usage: mm_map_advs_give <userid|nickname|accountid>\n");
 }
 
 void LoadConfig()
@@ -171,7 +190,7 @@ CBaseProp* CreateEntity(MapModels& model)
 		Warning("Failed to create entity %s\n", model.sModel.c_str());
 		return nullptr;
 	}
-	pEntity->Teleport(&model.vPosition, &model.qRotation, nullptr);
+	g_pUtils->TeleportEntity(pEntity, &model.vPosition, &model.qRotation, nullptr);
 	CEntityKeyValues* pKeyValues = new CEntityKeyValues();
 	pKeyValues->SetString("model", model.sModel.c_str());
 	g_pUtils->DispatchSpawn(pEntity, pKeyValues);
@@ -256,7 +275,7 @@ void OnPlayerPing(const char* szName, IGameEvent* pEvent, bool bDontBroadcast)
 		int iIndex = g_iPropTemp[iSlot];
 		g_mapEntities[iIndex].vPosition = Vector(pEvent->GetFloat("x"), pEvent->GetFloat("y"), pEvent->GetFloat("z"));
 		if(g_mapEntities[iIndex].hEntity)
-			g_mapEntities[iIndex].hEntity->Teleport(&g_mapEntities[iIndex].vPosition, &g_mapEntities[iIndex].qRotation, nullptr);
+			g_pUtils->TeleportEntity(g_mapEntities[iIndex].hEntity, &g_mapEntities[iIndex].vPosition, &g_mapEntities[iIndex].qRotation, nullptr);
 		else
 			g_mapEntities[iIndex].hEntity = CHandle<CBaseProp>(CreateEntity(g_mapEntities[iIndex]));
 		SaveData(iIndex);
@@ -274,6 +293,7 @@ void ShowAdd(int iSlot)
 		g_pMenus->AddItemMenu(hMenu, entity.first.c_str(), entity.first.c_str());
 	}
 	g_pMenus->SetExitMenu(hMenu, true);
+	g_pMenus->SetBackMenu(hMenu, true);
 	g_pMenus->SetCallback(hMenu, [](const char* szBack, const char* szFront, int iItem, int iSlot)
 	{
 		if(iItem < 7)
@@ -293,6 +313,8 @@ void ShowAdd(int iSlot)
 			g_pUtils->PrintToChat(iSlot, "Выберите место для рекламы с помощью пинга(колёсика мышки)");
 			g_pMenus->ClosePlayerMenu(iSlot);
 		}
+		else if(iItem == 7)
+			MainMenu(iSlot);
 	});
 	g_pMenus->DisplayPlayerMenu(hMenu, iSlot);
 }
@@ -355,7 +377,7 @@ void ShowItem(int iIndex, int iSlot)
 						}
 						g_mapEntities[iIndex].vPosition = vPosition;
 						if(g_mapEntities[iIndex].hEntity)
-							g_mapEntities[iIndex].hEntity->Teleport(&vPosition, &g_mapEntities[iIndex].qRotation, nullptr);
+							g_pUtils->TeleportEntity(g_mapEntities[iIndex].hEntity, &vPosition, &g_mapEntities[iIndex].qRotation, nullptr);
 						SaveData(iIndex);
 					}
 					else if(iItem == 7)
@@ -408,7 +430,7 @@ void ShowItem(int iIndex, int iSlot)
 						}
 						g_mapEntities[iIndex].qRotation = qRotation;
 						if(g_mapEntities[iIndex].hEntity)
-							g_mapEntities[iIndex].hEntity->Teleport(&g_mapEntities[iIndex].vPosition, &qRotation, nullptr);
+							g_pUtils->TeleportEntity(g_mapEntities[iIndex].hEntity, &g_mapEntities[iIndex].vPosition, &qRotation, nullptr);
 						SaveData(iIndex);
 					}
 					else if(iItem == 7)
@@ -426,7 +448,7 @@ void ShowItem(int iIndex, int iSlot)
 					g_pUtils->PrintToChat(iSlot, "Для этого вы должны быть живы");
 					return;
 				}
-				pPlayer->GetPlayerPawn()->Teleport(&g_mapEntities[iIndex].vPosition, &g_mapEntities[iIndex].qRotation, nullptr);
+				g_pUtils->TeleportEntity(pPlayer->GetPlayerPawn(), &g_mapEntities[iIndex].vPosition, &g_mapEntities[iIndex].qRotation, nullptr);
 			}
 			else if(!strcmp(szBack, "teleport2"))
 			{
@@ -457,6 +479,8 @@ void ShowList(int iSlot)
 	{
 		g_pMenus->AddItemMenu(hMenu, std::to_string(i).c_str(), g_mapEntities[i].sName.c_str());
 	}
+	g_pMenus->SetExitMenu(hMenu, true);
+	g_pMenus->SetBackMenu(hMenu, true);
 	g_pMenus->SetCallback(hMenu, [](const char* szBack, const char* szFront, int iItem, int iSlot)
 	{
 		if(iItem < 7)
