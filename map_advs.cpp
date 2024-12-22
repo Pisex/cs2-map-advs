@@ -1,7 +1,6 @@
-L#include <stdio.h>
+#include <stdio.h>
 #include "map_advs.h"
 #include "metamod_oslink.h"
-#include "entitykeyvalues.h"
 #include "schemasystem/schemasystem.h"
 #include <fstream>
 
@@ -191,9 +190,8 @@ CBaseProp* CreateEntity(MapModels& model)
 		return nullptr;
 	}
 	g_pUtils->TeleportEntity(pEntity, &model.vPosition, &model.qRotation, nullptr);
-	CEntityKeyValues* pKeyValues = new CEntityKeyValues();
-	pKeyValues->SetString("model", model.sModel.c_str());
-	g_pUtils->DispatchSpawn(pEntity, pKeyValues);
+	g_pUtils->SetEntityModel(pEntity, model.sModel.c_str());
+	g_pUtils->DispatchSpawn(pEntity, nullptr);
 	return pEntity;
 }
 
