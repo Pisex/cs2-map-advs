@@ -33,7 +33,7 @@ std::map<std::string, std::string> g_Entities;
 bool g_bVIPToggle[64];
 bool g_bAccess[64];
 
-SH_DECL_HOOK7_void(ISource2GameEntities, CheckTransmit, SH_NOATTRIB, 0, CCheckTransmitInfo **, int, CBitVec<16384> &, const Entity2Networkable_t **, const uint16 *, int, bool);
+SH_DECL_HOOK7_void(ISource2GameEntities, CheckTransmit, SH_NOATTRIB, 0, CCheckTransmitInfo **, int, CBitVec<16384> &, CBitVec<16384> &, const Entity2Networkable_t **, const uint16 *, int);
 
 CGameEntitySystem* GameEntitySystem()
 {
@@ -149,7 +149,7 @@ bool map_advs::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool
 	return true;
 }
 
-void map_advs::Hook_CheckTransmit(CCheckTransmitInfo **ppInfoList, int infoCount, CBitVec<16384> &unionTransmitEdicts, const Entity2Networkable_t **pNetworkables, const uint16 *pEntityIndicies, int nEntities, bool bEnablePVSBits)
+void map_advs::Hook_CheckTransmit(CCheckTransmitInfo **ppInfoList, int infoCount, CBitVec<16384> &unionTransmitEdicts, CBitVec<16384> &pvsTransmitEdicts, const Entity2Networkable_t **pNetworkables, const uint16 *pEntityIndicies, int nEntities)
 {
 	if (!g_pEntitySystem || !g_pVIPCore)
 		return;
