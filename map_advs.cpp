@@ -156,17 +156,19 @@ void map_advs::Hook_CheckTransmit(CCheckTransmitInfo **ppInfoList, int infoCount
 
 	for (int i = 0; i < infoCount; i++)
 	{
-		auto &pInfo = ppInfoList[i];
-		int iPlayerSlot = (int)*((uint8 *)pInfo + 584);
+		CCheckTransmitInfo *pInfo = ppInfoList[i];
+		if (!pInfo) continue;
+	
+		int iPlayerSlot = pEntityIndicies[i];
 		CCSPlayerController* pSelfController = CCSPlayerController::FromSlot(iPlayerSlot);
 		if (!pSelfController || !pSelfController->IsConnected())
 			continue;
-		
-		if(g_bVIPToggle[iPlayerSlot])
+	
+		if (g_bVIPToggle[iPlayerSlot])
 		{
-			for(auto& model : g_mapEntities)
+			for (auto& model : g_mapEntities)
 			{
-				if(model.hEntity)
+				if (model.hEntity)
 					pInfo->m_pTransmitEntity->Clear(model.hEntity->entindex());
 			}
 		}
