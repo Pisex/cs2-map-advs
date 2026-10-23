@@ -33,12 +33,6 @@ std::map<std::string, std::string> g_Entities;
 bool g_bVIPToggle[64];
 bool g_bAccess[64];
 
-SH_DECL_HOOK7_void(ISource2GameEntities, CheckTransmit, SH_NOATTRIB, 0, CCheckTransmitInfo **, int, CBitVec<16384> &, const Entity2Networkable_t **, const uint16 *, int, bool);
-
-CGameEntitySystem* GameEntitySystem()
-{
-	return g_pUtils->GetCGameEntitySystem();
-}
 
 bool containsOnlyDigits(const std::string& str) {
 	return str.find_first_not_of("0123456789") == std::string::npos;
@@ -140,8 +134,8 @@ bool map_advs::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool
 	GET_V_IFACE_CURRENT(GetEngineFactory, engine, IVEngineServer2, SOURCE2ENGINETOSERVER_INTERFACE_VERSION);
 	GET_V_IFACE_CURRENT(GetFileSystemFactory, g_pFullFileSystem, IFileSystem, FILESYSTEM_INTERFACE_VERSION);
 	GET_V_IFACE_ANY(GetServerFactory, g_pSource2GameEntities, ISource2GameEntities, SOURCE2GAMEENTITIES_INTERFACE_VERSION);
+	GET_V_IFACE_CURRENT(GetEngineFactory, g_pGameResourceServiceServer, IGameResourceService, GAMERESOURCESERVICESERVER_INTERFACE_VERSION);
 
-	SH_ADD_HOOK(ISource2GameEntities, CheckTransmit, g_pSource2GameEntities, SH_MEMBER(this, &map_advs::Hook_CheckTransmit), true);
 
 	g_SMAPI->AddListener( this, this );
 	ConVar_Register(FCVAR_GAMEDLL);
@@ -149,15 +143,16 @@ bool map_advs::Load(PluginId id, ISmmAPI* ismm, char* error, size_t maxlen, bool
 	return true;
 }
 
-void map_advs::Hook_CheckTransmit(CCheckTransmitInfo **ppInfoList, int infoCount, CBitVec<16384> &unionTransmitEdicts, const Entity2Networkable_t **pNetworkables, const uint16 *pEntityIndicies, int nEntities, bool bEnablePVSBits)
+void map_advs::Hook_CheckTransmit(CCheckTransmitInfo **pInfoInfoList, int nInfoCount, CBitVec<16384> &unionTransmitEdicts, CBitVec<16384> &, const Entity2Networkable_t **pNetworkables, const uint16 *pEntityIndicies, int nEntityIndices, bool bEnablePVSBits)
 {
 	if (!g_pEntitySystem || !g_pVIPCore)
 		return;
 
-	for (int i = 0; i < infoCount; i++)
+	for (int i = 0; i < nInfoCount; i++)
 	{
-		auto &pInfo = ppInfoList[i];
-		int iPlayerSlot = (int)*((uint8 *)pInfo + 584);
+		auto &pInfo = pInfoInfoList[i];
+		int iPlayerSlot = pInfo->m_nPlayerSlot;
+
 		CCSPlayerController* pSelfController = CCSPlayerController::FromSlot(iPlayerSlot);
 		if (!pSelfController || !pSelfController->IsConnected())
 			continue;
@@ -175,7 +170,7 @@ void map_advs::Hook_CheckTransmit(CCheckTransmitInfo **ppInfoList, int infoCount
 
 bool map_advs::Unload(char *error, size_t maxlen)
 {
-	SH_REMOVE_HOOK(ISource2GameEntities, CheckTransmit, g_pSource2GameEntities, SH_MEMBER(this, &map_advs::Hook_CheckTransmit), true);
+	if(g_pUtils) g_pUtils->ClearAllHooks(g_PLID);
 	ConVar_Unregister();
 	
 	return true;
@@ -183,7 +178,7 @@ bool map_advs::Unload(char *error, size_t maxlen)
 
 CBaseProp* CreateEntity(MapModels& model)
 {
-	CBaseProp* pEntity = dynamic_cast<CBaseProp*>(g_pUtils->CreateEntityByName("prop_dynamic", -1));
+	CBaseProp* pEntity = static_cast<CBaseProp*>(g_pUtils->CreateEntityByName("prop_dynamic", -1));
 	if (!pEntity)
 	{
 		Warning("Failed to create entity %s\n", model.sModel.c_str());
@@ -192,6 +187,14 @@ CBaseProp* CreateEntity(MapModels& model)
 	g_pUtils->TeleportEntity(pEntity, &model.vPosition, &model.qRotation, nullptr);
 	g_pUtils->SetEntityModel(pEntity, model.sModel.c_str());
 	g_pUtils->DispatchSpawn(pEntity, nullptr);
+
+	if(!strcmp(model.sModel.c_str(),"models/kolka/hypemg/spirit/void.vmdl")) {
+		g_pUtils->NextFrame([hEntity = CHandle<CBaseProp>(pEntity)]() {
+			CBaseModelEntity* pEntity = hEntity.Get();
+			if(!pEntity) return;
+			g_pUtils->AcceptEntityInput(pEntity, "SetAnimationLooping", "idle");
+		});
+	}
 	return pEntity;
 }
 
@@ -314,7 +317,7 @@ void ShowAdd(int iSlot)
 		else if(iItem == 7)
 			MainMenu(iSlot);
 	});
-	g_pMenus->DisplayPlayerMenu(hMenu, iSlot);
+	g_pMenus->DisplayPlayerMenu(hMenu, iSlot, true, true);
 }
 
 void ShowItem(int iIndex, int iSlot)
@@ -383,7 +386,7 @@ void ShowItem(int iIndex, int iSlot)
 						ShowItem(iIndex, iSlot);
 					}
 				});
-				g_pMenus->DisplayPlayerMenu(hMenu, iSlot);
+				g_pMenus->DisplayPlayerMenu(hMenu, iSlot, true, true);
 			}
 			else if(!strcmp(szBack, "rotate"))
 			{
@@ -436,7 +439,7 @@ void ShowItem(int iIndex, int iSlot)
 						ShowItem(iIndex, iSlot);
 					}
 				});
-				g_pMenus->DisplayPlayerMenu(hMenu, iSlot);
+				g_pMenus->DisplayPlayerMenu(hMenu, iSlot, true, true);
 			}
 			else if(!strcmp(szBack, "teleport"))
 			{
@@ -466,7 +469,7 @@ void ShowItem(int iIndex, int iSlot)
 		else if(iItem == 7)
 			ShowList(iSlot);
 	});
-	g_pMenus->DisplayPlayerMenu(hMenu, iSlot);
+	g_pMenus->DisplayPlayerMenu(hMenu, iSlot, true, true);
 }
 
 void ShowList(int iSlot)
@@ -489,7 +492,7 @@ void ShowList(int iSlot)
 		else if(iItem == 7)
 			MainMenu(iSlot);
 	});
-	g_pMenus->DisplayPlayerMenu(hMenu, iSlot);
+	g_pMenus->DisplayPlayerMenu(hMenu, iSlot, true, true);
 }
 
 void MainMenu(int iSlot)
@@ -509,7 +512,7 @@ void MainMenu(int iSlot)
 				ShowAdd(iSlot);
 		}
 	});
-	g_pMenus->DisplayPlayerMenu(hMenu, iSlot);
+	g_pMenus->DisplayPlayerMenu(hMenu, iSlot, true, true);
 }
 
 bool OnMapAdvs(int iSlot, const char* szContent)
@@ -542,6 +545,8 @@ void map_advs::AllPluginsLoaded()
 		engine->ServerCommand(sBuffer.c_str());
 		return;
 	}
+	g_pUtils->AddEntityListener(g_PLID, this);
+
 	g_pMenus = (IMenusApi*)g_SMAPI->MetaFactory(Menus_INTERFACE, &ret, NULL);
 	if (ret == META_IFACE_FAILED)
 	{
@@ -563,7 +568,7 @@ void map_advs::AllPluginsLoaded()
 			g_bVIPToggle[iSlot] = g_pVIPCore->VIP_GetClientFeatureBool(iSlot, "map_advs");
 		});
 	}
-	g_pUtils->StartupServer(g_PLID, StartupServer);
+	g_pUtils->StartupServer(g_PLID, ::StartupServer);
 	g_pUtils->HookEvent(g_PLID, "round_start", OnRoundStart);
 	g_pUtils->HookEvent(g_PLID, "player_ping", OnPlayerPing);
 	g_pUtils->RegCommand(g_PLID, {"mm_map_advs"}, {"!map_advs"}, OnMapAdvs);
@@ -608,4 +613,9 @@ const char* map_advs::GetName()
 const char* map_advs::GetURL()
 {
 	return "https://discord.gg/g798xERK5Y";
+}
+
+void map_advs::CheckTransmit(CCheckTransmitInfo **ppInfoList, int infoCount, CBitVec<16384> &unionTransmitEdicts, CBitVec<16384> &unionTransmitNonPlayers, const Entity2Networkable_t **pNetworkables, const uint16 *pEntityIndicies, int nEntities, bool bEnablePVSBits)
+{
+	Hook_CheckTransmit(ppInfoList, infoCount, unionTransmitEdicts, unionTransmitNonPlayers, pNetworkables, pEntityIndicies, nEntities, bEnablePVSBits);
 }
